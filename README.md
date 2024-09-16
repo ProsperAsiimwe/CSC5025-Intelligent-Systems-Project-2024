@@ -1,7 +1,5 @@
 # CSC5025-Intelligent-Systems-Project-2024
 
-## [CLICK TO SEE WORK PLAN AND MEMBER CONTRIBUTIONS LINK](https://docs.google.com/spreadsheets/d/1BdRrS0FJWRtg4NMQr72aYhpX2fI-pUGDXgVWk7TOiII/edit?usp=sharing)
-
 ## Project Overview
 This project aims to design, implement, and analyze a Hybrid AI System for continuous learning, knowledge discovery, and interactive decision-making, specifically for share trading and investment decision-making on the Johannesburg Stock Exchange (JSE).
 
