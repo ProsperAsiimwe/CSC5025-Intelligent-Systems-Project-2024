@@ -9,6 +9,8 @@ import networkx as nx
 import time
 from tqdm import tqdm
 import random
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Set random seed for reproducibility
 seed = 42
@@ -46,16 +48,15 @@ def create_sequences(data, seq_length, horizon):
 input_windows = [30, 60, 120]
 prediction_horizons = [1, 2, 5, 10, 30]
 
-# Split the data into training, validation, and test sets for each input window and prediction horizon
+# Split the data into training/validation/test sets for each input window and prediction horizon
 results = {}
-
 for window in input_windows:
     results[window] = {}
     for horizon in prediction_horizons:
-        X, y = create_sequences(normalized_data, window, horizon)
-        
+        X_seq, y_seq = create_sequences(normalized_data, window, horizon)
+
         # Split into train/validation/test sets
-        X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.4, random_state=42)
+        X_train, X_temp, y_train, y_temp = train_test_split(X_seq, y_seq, test_size=0.4, random_state=42)
         X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
 
         # Convert to PyTorch tensors and move to device
@@ -68,9 +69,48 @@ for window in input_windows:
             'y_test': torch.FloatTensor(y_test).to(device)
         }
 
+
+# Visualization: Loss Curves
+def plot_loss_curve(train_losses, val_losses, input_window, prediction_horizon):
+    plt.figure(figsize=(10, 6))
+    plt.plot(train_losses, label="Training Loss")
+    plt.plot(val_losses, label="Validation Loss")
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title(f'Loss Curve for Input Window: {input_window} and Prediction Horizon: {prediction_horizon}')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(f'loss_curve_window_{input_window}_horizon_{prediction_horizon}.png')  # Save plot
+    plt.close()  # Close the figure after saving
+
+# Visualization: Predictions vs Actuals
+def plot_predictions_vs_actuals(predictions, actuals, input_window, prediction_horizon):
+    plt.figure(figsize=(10, 6))
+    plt.plot(actuals, label='Actuals')
+    plt.plot(predictions, label='Predictions', alpha=0.7)
+    plt.xlabel('Time Step')
+    plt.ylabel('Value')
+    plt.title(f'Predictions vs Actuals for Window: {input_window} and Horizon: {prediction_horizon}')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(f'pred_vs_actual_window_{input_window}_horizon_{prediction_horizon}.png')  # Save plot
+    plt.close()  # Close the figure after saving
+
+# Visualization: Correlation Heatmap
+def plot_correlation_matrix(correlation_matrix):
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(correlation_matrix, annot=False, cmap='coolwarm', fmt='.2f', linewidths=0.5)
+    plt.title('Correlation Matrix Heatmap')
+    plt.savefig('correlation_matrix_heatmap.png')  # Save heatmap
+    plt.close()  # Close the figure after saving
+
+
 # Graph Construction (using correlation matrix)
 correlation_matrix = np.corrcoef(data.T)
 graph = nx.from_numpy_array(correlation_matrix)
+
+# Plot the correlation matrix heatmap
+plot_correlation_matrix(correlation_matrix)
 
 # Create adjacency matrix from correlation matrix
 adj_matrix = torch.FloatTensor(nx.to_numpy_matrix(graph)).to(device)
@@ -88,144 +128,201 @@ class GraphConvLayer(nn.Module):
 
 # Define the GraphWaveNet model
 class GraphWaveNet(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, num_nodes, addaptadj=True):
+    def __init__(self, input_size, hidden_size, output_size, num_nodes):
         super(GraphWaveNet, self).__init__()
         self.num_nodes = num_nodes
         self.hidden_size = hidden_size
-        
-        # Adaptive adjacency matrix
-        if addaptadj:
-            self.adapt_adj = nn.Parameter(torch.eye(num_nodes))  # Learnable adjacency matrix
+
+        # Adaptive adjacency matrix (optional)
+        self.adapt_adj = nn.Parameter(torch.eye(num_nodes))
 
         # Graph convolutional layers
         self.gc1 = GraphConvLayer(input_size, hidden_size)
         self.gc2 = GraphConvLayer(hidden_size, hidden_size)
 
         # Temporal convolution layers
-        self.temporal_conv = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=3, padding=1)
+        self.temporal_conv = nn.Conv1d(in_channels=hidden_size,
+                                        out_channels=hidden_size,
+                                        kernel_size=3,
+                                        padding=1)
 
         # Fully connected layer for output
         self.fc = nn.Linear(hidden_size, output_size)
 
-    def forward(self, x, adj):
-        # Adjust adjacency matrix if adaptive
-        if hasattr(self, 'adapt_adj'):
-            adj = self.adapt_adj
-        
-        # Graph convolution
+    def forward(self, x):
+        adj = self.adapt_adj  # Use adaptive adjacency matrix
+
+        # Graph convolution layers with ReLU activation
         x = self.gc1(x, adj)
         x = torch.relu(x)
         x = self.gc2(x, adj)
         x = torch.relu(x)
 
-        # Temporal convolution
+        # Temporal convolution layer processing
         x = x.transpose(1, 2)  # Prepare for temporal convolution
         x = self.temporal_conv(x)
         x = torch.relu(x)
         x = x.transpose(1, 2)
 
-        # Final output layer
-        out = self.fc(x[:, -1, :])  # Last time step
+        # Final output layer using last time step's output
+        out = self.fc(x[:, -1, :])
         return out
 
-# Function to compute MAPE
+# Function to compute MAPE (Mean Absolute Percentage Error)
 def MAPE(y_true, y_pred):
     return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
 
-# Hyperparameter grid
+# Continual Learning Class Definition
+class ContinualLearningModel:
+    def __init__(self):
+        self.model = None
+        self.optimizer = None
+        
+    def initialize_model(self, input_size, hidden_size, output_size, num_nodes):
+        """Initialize model and optimizer."""
+        self.model = GraphWaveNet(input_size=input_size,
+                                   hidden_size=hidden_size,
+                                   output_size=output_size,
+                                   num_nodes=num_nodes).to(device)
+        
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+
+    def update_model(self, new_data_tensor, new_labels_tensor):
+        """Update the model with new data."""
+        
+        self.model.train()
+        
+        # Zero gradients and perform forward pass with new data
+        self.optimizer.zero_grad()
+        
+        outputs = self.model(new_data_tensor)  # Forward pass through the model
+        
+        loss_fn = nn.MSELoss()
+        
+        loss = loss_fn(outputs.squeeze(), new_labels_tensor)  # Compute loss
+        
+        loss.backward()  # Backpropagation
+        
+        self.optimizer.step()  # Update weights
+
+    def evaluate(self, test_data_tensor, test_labels_tensor):
+        """Evaluate the model on test data."""
+        
+        self.model.eval()
+        
+        with torch.no_grad():
+            test_outputs = self.model(test_data_tensor.to(device))
+            test_loss_fn = nn.MSELoss()
+            test_loss = test_loss_fn(test_outputs.squeeze(), test_labels_tensor.to(device))
+            test_mae = mean_absolute_error(test_labels_tensor.cpu().numpy(), test_outputs.cpu().numpy())
+            test_rmse = np.sqrt(mean_squared_error(test_labels_tensor.cpu().numpy(), test_outputs.cpu().numpy()))
+            return test_loss.item(), test_mae, test_rmse
+
+# Hyperparameter grid for tuning model parameters 
 param_grid = {
-    'hidden_size': [32, 64, 128],
-    'num_epochs': [100],  # Increased to allow for better convergence
+    'hidden_size': [32],
+    'num_epochs': [100], 
     'learning_rate': [0.001]
 }
 
-# Define the number of runs for stability analysis
+# Define the number of runs for stability analysis 
 num_runs = 3
 
-# Perform grid search across different input windows and prediction horizons
+# Initialize lists to store losses for visualization
+train_losses = []
+val_losses = []
+
+# Perform grid search across different input windows and prediction horizons 
 for window in input_windows:
     print(f"\nInput Window: {window}")
+    
     for horizon in prediction_horizons:
-        print(f"Prediction Horizon: {horizon} days")
-        best_loss = float('inf')
-        best_params = {}
-        all_losses = []  # To store losses for stability analysis
+        
+       print(f"Prediction Horizon: {horizon} days")
+       
+       best_loss=float('inf')
+       best_params={}
+       
+       all_losses=[] 
 
-        for params in ParameterGrid(param_grid):
-            print(f"Testing parameters: {params}")
-            run_losses = []  # To store losses for each run
+       for params in ParameterGrid(param_grid):
+           print(f"Testing parameters: {params}")
+           run_losses=[] 
 
-            for run in range(num_runs):
-                # Initialize the model and optimizer
-                model = GraphWaveNet(input_size=results[window][horizon]['X_train'].shape[2],
-                                      hidden_size=params['hidden_size'],
-                                      output_size=results[window][horizon]['y_train'].shape[1],
-                                      num_nodes=results[window][horizon]['X_train'].shape[1]).to(device)
-                criterion = nn.MSELoss()
-                optimizer = torch.optim.Adam(model.parameters(), lr=params['learning_rate'])
+           continual_model=ContinualLearningModel()
+           continual_model.initialize_model(input_size=results[window][horizon]['X_train'].shape[2],
+                                            hidden_size=params['hidden_size'],
+                                            output_size=results[window][horizon]['y_train'].shape[1],
+                                            num_nodes=results[window][horizon]['X_train'].shape[1])
 
-                # Training the model with timing and loss tracking
-                start_time = time.time()
-                for epoch in tqdm(range(params['num_epochs']), desc="Training Epochs"):
-                    model.train()
-                    optimizer.zero_grad()
-                    outputs = model(results[window][horizon]['X_train'], adj_matrix)
-                    loss = criterion(outputs, results[window][horizon]['y_train'])
-                    loss.backward()
-                    optimizer.step()
+           for run in range(num_runs):
+               start_time=time.time()
 
-                # Evaluate on the validation set
-                model.eval()
-                with torch.no_grad():
-                    val_outputs = model(results[window][horizon]['X_val'], adj_matrix)
-                    val_loss = criterion(val_outputs, results[window][horizon]['y_val'])
-                    run_losses.append(val_loss.item())  # Store validation loss for this run
+               # Training loop with tqdm progress bar 
+               for epoch in tqdm(range(params['num_epochs']), desc="Training Epochs"):
+                   continual_model.update_model(results[window][horizon]['X_train'], results[window][horizon]['y_train'])
 
-                # Print training time for this run
-                training_time = time.time() - start_time
-                print(f'Run {run + 1} - Validation Loss: {val_loss.item():.4f}, Training Time: {training_time:.2f} seconds')
+                   # Append training loss for visualization (assuming loss is computed per epoch)
+                   train_loss, val_loss, _ = continual_model.evaluate(results[window][horizon]['X_val'], results[window][horizon]['y_val'])
+                   train_losses.append(train_loss)
+                   val_losses.append(val_loss)
 
-            # Store the average loss across runs for this parameter configuration
-            avg_loss = np.mean(run_losses)
-            all_losses.append(avg_loss)
+               # Evaluate on the validation set 
+               val_loss,val_mae,val_rmse=continual_model.evaluate(results[window][horizon]['X_val'], results[window][horizon]['y_val'])
+               run_losses.append(val_loss) 
 
-            # Check if this is the best loss
-            if avg_loss < best_loss:
-                best_loss = avg_loss
-                best_params = params
+               training_time=time.time()-start_time 
+               print(f'Run {run + 1} - Validation Loss: {val_loss:.4f}, Training Time: {training_time:.2f} seconds')
 
-        print(f'Best parameters for window {window} and horizon {horizon}: {best_params} with average validation loss: {best_loss:.4f}')
+           avg_loss=np.mean(run_losses) 
+           all_losses.append(avg_loss) 
 
-        # Final evaluation on the test set with the best parameters
-        model = GraphWaveNet(input_size=results[window][horizon]['X_train'].shape[2],
-                              hidden_size=best_params['hidden_size'],
-                              output_size=results[window][horizon]['y_train'].shape[1],
-                              num_nodes=results[window][horizon]['X_train'].shape[1]).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=best_params['learning_rate'])
+           if avg_loss < best_loss:
+               best_loss=avg_loss 
+               best_params=params 
 
-        # Train the model again with the best parameters
-        for epoch in tqdm(range(best_params['num_epochs']), desc="Final Training"):
-            model.train()
-            optimizer.zero_grad()
-            outputs = model(results[window][horizon]['X_train'], adj_matrix)
-            loss = criterion(outputs, results[window][horizon]['y_train'])
-            loss.backward()
-            optimizer.step()
+           print(f'Best parameters for window {window} and horizon {horizon}: {best_params} with average validation loss: {best_loss:.4f}')
 
-        # Evaluate on the test set
-        model.eval()
-        with torch.no_grad():
-            test_outputs = model(results[window][horizon]['X_test'], adj_matrix)
-            test_loss = criterion(test_outputs, results[window][horizon]['y_test'])
-            # Inverse transform to get actual prices
-            test_outputs_inverse = scaler.inverse_transform(test_outputs.cpu().numpy())
-            test_y_inverse = scaler.inverse_transform(results[window][horizon]['y_test'].cpu().numpy())
-            # Calculate metrics
-            test_mae = mean_absolute_error(test_y_inverse, test_outputs_inverse)
-            test_rmse = np.sqrt(mean_squared_error(test_y_inverse, test_outputs_inverse))
-            test_mape = MAPE(test_y_inverse, test_outputs_inverse)
+       # Plot and save the loss curves
+       plot_loss_curve(train_losses, val_losses, window, horizon)
 
-        print(f'Test Loss (MSE): {test_loss.item():.4f}')
-        print(f'Test MAE: {test_mae:.4f}')
-        print(f'Test RMSE: {test_rmse:.4f}')
-        print(f'Test MAPE: {test_mape:.2f}%')
+# Final evaluation on the test set with the best parameters 
+final_model=GraphWaveNet(input_size=results[window][horizon]['X_train'].shape[2],
+                          hidden_size=best_params['hidden_size'],
+                          output_size=results[window][horizon]['y_train'].shape[1],
+                          num_nodes=results[window][horizon]['X_train'].shape[1]).to(device)
+
+optimizer_final=torch.optim.Adam(final_model.parameters(), lr=best_params['learning_rate'])
+
+criterion_final = nn.MSELoss()  # Define criterion here
+
+for epoch in tqdm(range(best_params['num_epochs']), desc="Final Training"):
+     final_model.train()
+     optimizer_final.zero_grad()
+     outputs=final_model(results[window][horizon]['X_train'])
+     loss=criterion_final(outputs ,results[window][horizon]['y_train'])
+     loss.backward()
+     optimizer_final.step()
+
+# Evaluate on the test set 
+final_model.eval()
+
+with torch.no_grad():
+     test_outputs=final_model(results[window][horizon]['X_test'])
+     test_loss=criterion_final(test_outputs ,results[window][horizon]['y_test'])
+
+     test_outputs_inverse=scaler.inverse_transform(test_outputs.cpu().numpy())
+     test_y_inverse=scaler.inverse_transform(results[window][horizon]['y_test'].cpu().numpy())
+
+     test_mae=mean_absolute_error(test_y_inverse,test_outputs_inverse)
+     test_rmse=np.sqrt(mean_squared_error(test_y_inverse,test_outputs_inverse))
+     test_mape=MAPE(test_y_inverse,test_outputs_inverse)
+
+# Plot and save the predictions vs actuals
+plot_predictions_vs_actuals(test_outputs_inverse, test_y_inverse, window, horizon)
+
+
+print(f'Test Loss (MSE): {test_loss.item():.4f}')
+print(f'Test MAE: {test_mae:.4f}')
+print(f'Test RMSE: {test_rmse:.4f}')
+print(f'Test MAPE: {test_mape:.2f}%')
