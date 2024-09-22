@@ -327,6 +327,8 @@ for window in input_windows:
                 test_maes[window][horizon].append(test_mae)
                 test_rmses[window][horizon].append(test_rmse)
 
+                run_losses.append(val_loss)
+
             avg_loss = np.mean(run_losses) 
             all_losses.append(avg_loss) 
 
@@ -342,6 +344,11 @@ for window in input_windows:
 
         print(f'Best parameters for window {window} and horizon {horizon}: {best_params} with average validation loss: {best_loss:.4f}')
         print('\n')
+
+# Ensure we have a best_model
+if best_model is None:
+    print("Warning: No best model was selected. Using the last trained model.")
+    best_model = continual_model.model
 
 # Visualization: Plot metrics across runs
 plot_metrics(train_losses, 'Training Loss', input_windows, prediction_horizons)
