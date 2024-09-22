@@ -9,8 +9,6 @@ import networkx as nx
 import time
 from tqdm import tqdm
 import random
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 # Set random seed for reproducibility
 seed = 42
@@ -69,48 +67,9 @@ for window in input_windows:
             'y_test': torch.FloatTensor(y_test).to(device)
         }
 
-
-# Visualization: Loss Curves
-def plot_loss_curve(train_losses, val_losses, input_window, prediction_horizon):
-    plt.figure(figsize=(10, 6))
-    plt.plot(train_losses, label="Training Loss")
-    plt.plot(val_losses, label="Validation Loss")
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title(f'Loss Curve for Input Window: {input_window} and Prediction Horizon: {prediction_horizon}')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(f'loss_curve_window_{input_window}_horizon_{prediction_horizon}.png')  # Save plot
-    plt.close()  # Close the figure after saving
-
-# Visualization: Predictions vs Actuals
-def plot_predictions_vs_actuals(predictions, actuals, input_window, prediction_horizon):
-    plt.figure(figsize=(10, 6))
-    plt.plot(actuals, label='Actuals')
-    plt.plot(predictions, label='Predictions', alpha=0.7)
-    plt.xlabel('Time Step')
-    plt.ylabel('Value')
-    plt.title(f'Predictions vs Actuals for Window: {input_window} and Horizon: {prediction_horizon}')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(f'pred_vs_actual_window_{input_window}_horizon_{prediction_horizon}.png')  # Save plot
-    plt.close()  # Close the figure after saving
-
-# Visualization: Correlation Heatmap
-def plot_correlation_matrix(correlation_matrix):
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(correlation_matrix, annot=False, cmap='coolwarm', fmt='.2f', linewidths=0.5)
-    plt.title('Correlation Matrix Heatmap')
-    plt.savefig('correlation_matrix_heatmap.png')  # Save heatmap
-    plt.close()  # Close the figure after saving
-
-
 # Graph Construction (using correlation matrix)
 correlation_matrix = np.corrcoef(data.T)
 graph = nx.from_numpy_array(correlation_matrix)
-
-# Plot the correlation matrix heatmap
-plot_correlation_matrix(correlation_matrix)
 
 # Create adjacency matrix from correlation matrix
 adj_matrix = torch.FloatTensor(nx.to_numpy_matrix(graph)).to(device)
@@ -220,7 +179,7 @@ class ContinualLearningModel:
 
 # Hyperparameter grid for tuning model parameters 
 param_grid = {
-    'hidden_size': [32],
+    'hidden_size': [32, 64, 128],
     'num_epochs': [100], 
     'learning_rate': [0.001]
 }
@@ -228,79 +187,76 @@ param_grid = {
 # Define the number of runs for stability analysis 
 num_runs = 3
 
-# Initialize lists to store losses for visualization
-train_losses = []
-val_losses = []
-
 # Perform grid search across different input windows and prediction horizons 
 for window in input_windows:
     print(f"\nInput Window: {window}")
     
     for horizon in prediction_horizons:
         
-       print(f"Prediction Horizon: {horizon} days")
-       
-       best_loss=float('inf')
-       best_params={}
-       
-       all_losses=[] 
+        print(f"Prediction Horizon: {horizon} days")
+        
+        best_loss = float('inf')
+        best_params = {}
+        
+        all_losses = [] 
 
-       for params in ParameterGrid(param_grid):
-           print(f"Testing parameters: {params}")
-           run_losses=[] 
+        for params in ParameterGrid(param_grid):
+            print(f"Testing parameters: {params}")
+            run_losses = [] 
 
-           continual_model=ContinualLearningModel()
-           continual_model.initialize_model(input_size=results[window][horizon]['X_train'].shape[2],
-                                            hidden_size=params['hidden_size'],
-                                            output_size=results[window][horizon]['y_train'].shape[1],
-                                            num_nodes=results[window][horizon]['X_train'].shape[1])
+            continual_model = ContinualLearningModel()
+            continual_model.initialize_model(input_size=results[window][horizon]['X_train'].shape[2],
+                                             hidden_size=params['hidden_size'],
+                                             output_size=results[window][horizon]['y_train'].shape[1],
+                                             num_nodes=results[window][horizon]['X_train'].shape[1])
 
-           for run in range(num_runs):
-               start_time=time.time()
+            for run in range(num_runs):
+                start_time = time.time()
 
-               # Training loop with tqdm progress bar 
-               for epoch in tqdm(range(params['num_epochs']), desc="Training Epochs"):
-                   continual_model.update_model(results[window][horizon]['X_train'], results[window][horizon]['y_train'])
+                # Training loop with tqdm progress bar 
+                for epoch in tqdm(range(params['num_epochs']), desc="Training Epochs"):
+                    continual_model.update_model(results[window][horizon]['X_train'], results[window][horizon]['y_train'])
 
-                   # Append training loss for visualization (assuming loss is computed per epoch)
-                   train_loss, val_loss, _ = continual_model.evaluate(results[window][horizon]['X_val'], results[window][horizon]['y_val'])
-                   train_losses.append(train_loss)
-                   val_losses.append(val_loss)
+                # Evaluate on the validation set 
+                val_loss, val_mae, val_rmse = continual_model.evaluate(results[window][horizon]['X_val'], results[window][horizon]['y_val'])
+                run_losses.append(val_loss) 
 
-               # Evaluate on the validation set 
-               val_loss,val_mae,val_rmse=continual_model.evaluate(results[window][horizon]['X_val'], results[window][horizon]['y_val'])
-               run_losses.append(val_loss) 
+                training_time = time.time() - start_time 
+                print(f'Run {run + 1} - Validation Loss: {val_loss:.4f}, MAE: {val_mae:.4f}, RMSE: {val_rmse:.4f}, Training Time: {training_time:.2f} seconds')
 
-               training_time=time.time()-start_time 
-               print(f'Run {run + 1} - Validation Loss: {val_loss:.4f}, Training Time: {training_time:.2f} seconds')
+                # Testing phase moved inside
+                test_loss, test_mae, test_rmse = continual_model.evaluate(results[window][horizon]['X_test'], results[window][horizon]['y_test'])
+                
+                print(f'Run {run + 1} - Test Loss (MSE): {test_loss:.4f}, Test MAE: {test_mae:.4f}, Test RMSE: {test_rmse:.4f}')
 
-           avg_loss=np.mean(run_losses) 
-           all_losses.append(avg_loss) 
+            avg_loss = np.mean(run_losses) 
+            all_losses.append(avg_loss) 
 
-           if avg_loss < best_loss:
-               best_loss=avg_loss 
-               best_params=params 
+            if avg_loss < best_loss:
+                best_loss = avg_loss 
+                best_params = params 
 
-           print(f'Best parameters for window {window} and horizon {horizon}: {best_params} with average validation loss: {best_loss:.4f}')
+        print(f'Best parameters for window {window} and horizon {horizon}: {best_params} with average validation loss: {best_loss:.4f}')
 
-       # Plot and save the loss curves
-       plot_loss_curve(train_losses, val_losses, window, horizon)
+        print('\n')
+
 
 # Final evaluation on the test set with the best parameters 
-final_model=GraphWaveNet(input_size=results[window][horizon]['X_train'].shape[2],
+print(f"Final model with best parameters: {best_params}")
+final_model = GraphWaveNet(input_size=results[window][horizon]['X_train'].shape[2],
                           hidden_size=best_params['hidden_size'],
                           output_size=results[window][horizon]['y_train'].shape[1],
                           num_nodes=results[window][horizon]['X_train'].shape[1]).to(device)
 
-optimizer_final=torch.optim.Adam(final_model.parameters(), lr=best_params['learning_rate'])
+optimizer_final = torch.optim.Adam(final_model.parameters(), lr=best_params['learning_rate'])
 
-criterion_final = nn.MSELoss()  # Define criterion here
+criterion_final = nn.MSELoss()
 
 for epoch in tqdm(range(best_params['num_epochs']), desc="Final Training"):
      final_model.train()
      optimizer_final.zero_grad()
-     outputs=final_model(results[window][horizon]['X_train'])
-     loss=criterion_final(outputs ,results[window][horizon]['y_train'])
+     outputs = final_model(results[window][horizon]['X_train'])
+     loss = criterion_final(outputs, results[window][horizon]['y_train'])
      loss.backward()
      optimizer_final.step()
 
@@ -308,19 +264,15 @@ for epoch in tqdm(range(best_params['num_epochs']), desc="Final Training"):
 final_model.eval()
 
 with torch.no_grad():
-     test_outputs=final_model(results[window][horizon]['X_test'])
-     test_loss=criterion_final(test_outputs ,results[window][horizon]['y_test'])
+     test_outputs = final_model(results[window][horizon]['X_test'])
+     test_loss = criterion_final(test_outputs, results[window][horizon]['y_test'])
 
-     test_outputs_inverse=scaler.inverse_transform(test_outputs.cpu().numpy())
-     test_y_inverse=scaler.inverse_transform(results[window][horizon]['y_test'].cpu().numpy())
+     test_outputs_inverse = scaler.inverse_transform(test_outputs.cpu().numpy())
+     test_y_inverse = scaler.inverse_transform(results[window][horizon]['y_test'].cpu().numpy())
 
-     test_mae=mean_absolute_error(test_y_inverse,test_outputs_inverse)
-     test_rmse=np.sqrt(mean_squared_error(test_y_inverse,test_outputs_inverse))
-     test_mape=MAPE(test_y_inverse,test_outputs_inverse)
-
-# Plot and save the predictions vs actuals
-plot_predictions_vs_actuals(test_outputs_inverse, test_y_inverse, window, horizon)
-
+     test_mae = mean_absolute_error(test_y_inverse, test_outputs_inverse)
+     test_rmse = np.sqrt(mean_squared_error(test_y_inverse, test_outputs_inverse))
+     test_mape = MAPE(test_y_inverse, test_outputs_inverse)
 
 print(f'Test Loss (MSE): {test_loss.item():.4f}')
 print(f'Test MAE: {test_mae:.4f}')

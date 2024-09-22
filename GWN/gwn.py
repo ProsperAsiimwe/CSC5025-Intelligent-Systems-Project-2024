@@ -9,6 +9,8 @@ import networkx as nx
 import time
 from tqdm import tqdm
 import random
+import matplotlib.pyplot as plt
+import os
 
 # Set random seed for reproducibility
 seed = 42
@@ -179,10 +181,38 @@ class ContinualLearningModel:
 
 # Hyperparameter grid for tuning model parameters 
 param_grid = {
-    'hidden_size': [32],
+    'hidden_size': [128],
     'num_epochs': [100], 
     'learning_rate': [0.001]
 }
+
+# Visualization function for performance metrics
+def plot_metrics(metrics_dict, metric_name, input_windows, prediction_horizons, save_dir='plots'):
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)  # Create directory if it doesn't exist
+
+    plt.figure(figsize=(12, 6))
+    for window in input_windows:
+        for horizon in prediction_horizons:
+            values = metrics_dict[window][horizon]
+            plt.plot(values, label=f'Window: {window}, Horizon: {horizon}')
+    
+    plt.xlabel('Run')
+    plt.ylabel(metric_name)
+    plt.title(f'{metric_name} across Runs for Different Windows and Horizons')
+    plt.legend()
+    
+    # Save plot as a .png file
+    plot_filename = f"{metric_name.replace(' ', '_').lower()}_windows_{window}_horizons_{horizon}.png"
+    plt.savefig(os.path.join(save_dir, plot_filename))
+    
+    # plt.show()
+
+# Initialize dictionaries to store losses and metrics for each run
+train_losses = {window: {horizon: [] for horizon in prediction_horizons} for window in input_windows}
+val_losses = {window: {horizon: [] for horizon in prediction_horizons} for window in input_windows}
+test_maes = {window: {horizon: [] for horizon in prediction_horizons} for window in input_windows}
+test_rmses = {window: {horizon: [] for horizon in prediction_horizons} for window in input_windows}
 
 # Define the number of runs for stability analysis 
 num_runs = 3
@@ -193,61 +223,82 @@ for window in input_windows:
     
     for horizon in prediction_horizons:
         
-       print(f"Prediction Horizon: {horizon} days")
-       
-       best_loss=float('inf')
-       best_params={}
-       
-       all_losses=[] 
+        print(f"Prediction Horizon: {horizon} days")
+        
+        best_loss = float('inf')
+        best_params = {}
+        
+        all_losses = [] 
 
-       for params in ParameterGrid(param_grid):
-           print(f"Testing parameters: {params}")
-           run_losses=[] 
+        for params in ParameterGrid(param_grid):
+            print(f"Testing parameters: {params}")
+            run_losses = [] 
 
-           continual_model=ContinualLearningModel()
-           continual_model.initialize_model(input_size=results[window][horizon]['X_train'].shape[2],
-                                            hidden_size=params['hidden_size'],
-                                            output_size=results[window][horizon]['y_train'].shape[1],
-                                            num_nodes=results[window][horizon]['X_train'].shape[1])
+            continual_model = ContinualLearningModel()
+            continual_model.initialize_model(input_size=results[window][horizon]['X_train'].shape[2],
+                                             hidden_size=params['hidden_size'],
+                                             output_size=results[window][horizon]['y_train'].shape[1],
+                                             num_nodes=results[window][horizon]['X_train'].shape[1])
 
-           for run in range(num_runs):
-               start_time=time.time()
+            for run in range(num_runs):
+                start_time = time.time()
 
-               # Training loop with tqdm progress bar 
-               for epoch in tqdm(range(params['num_epochs']), desc="Training Epochs"):
-                   continual_model.update_model(results[window][horizon]['X_train'], results[window][horizon]['y_train'])
+                # Training loop with tqdm progress bar 
+                for epoch in tqdm(range(params['num_epochs']), desc="Training Epochs"):
+                    continual_model.update_model(results[window][horizon]['X_train'], results[window][horizon]['y_train'])
 
-               # Evaluate on the validation set 
-               val_loss,val_mae,val_rmse=continual_model.evaluate(results[window][horizon]['X_val'], results[window][horizon]['y_val'])
-               run_losses.append(val_loss) 
+                # Evaluate on the validation set 
+                val_loss, val_mae, val_rmse = continual_model.evaluate(results[window][horizon]['X_val'], results[window][horizon]['y_val'])
+                run_losses.append(val_loss) 
 
-               training_time=time.time()-start_time 
-               print(f'Run {run + 1} - Validation Loss: {val_loss:.4f}, Training Time: {training_time:.2f} seconds')
+                training_time = time.time() - start_time 
+                print(f'Run {run + 1} - Validation Loss: {val_loss:.4f}, MAE: {val_mae:.4f}, RMSE: {val_rmse:.4f}, Training Time: {training_time:.2f} seconds')
 
-           avg_loss=np.mean(run_losses) 
-           all_losses.append(avg_loss) 
+                # Testing phase moved inside
+                test_loss, test_mae, test_rmse = continual_model.evaluate(results[window][horizon]['X_test'], results[window][horizon]['y_test'])
+                
+                print(f'Run {run + 1} - Test Loss (MSE): {test_loss:.4f}, Test MAE: {test_mae:.4f}, Test RMSE: {test_rmse:.4f}')
 
-           if avg_loss < best_loss:
-               best_loss=avg_loss 
-               best_params=params 
+                # Store losses and metrics for later visualization
+                train_losses[window][horizon].append(val_loss)
+                val_losses[window][horizon].append(test_loss)
+                test_maes[window][horizon].append(test_mae)
+                test_rmses[window][horizon].append(test_rmse)
 
-           print(f'Best parameters for window {window} and horizon {horizon}: {best_params} with average validation loss: {best_loss:.4f}')
+            avg_loss = np.mean(run_losses) 
+            all_losses.append(avg_loss) 
+
+            if avg_loss < best_loss:
+                best_loss = avg_loss 
+                best_params = params 
+
+        print(f'Best parameters for window {window} and horizon {horizon}: {best_params} with average validation loss: {best_loss:.4f}')
+
+        print('\n')
+
+
+# Visualization: Plot metrics across runs
+plot_metrics(train_losses, 'Training Loss', input_windows, prediction_horizons)
+plot_metrics(val_losses, 'Validation Loss', input_windows, prediction_horizons)
+plot_metrics(test_maes, 'Test MAE', input_windows, prediction_horizons)
+plot_metrics(test_rmses, 'Test RMSE', input_windows, prediction_horizons)
 
 # Final evaluation on the test set with the best parameters 
-final_model=GraphWaveNet(input_size=results[window][horizon]['X_train'].shape[2],
+print(f"Final model with best parameters: {best_params}")
+final_model = GraphWaveNet(input_size=results[window][horizon]['X_train'].shape[2],
                           hidden_size=best_params['hidden_size'],
                           output_size=results[window][horizon]['y_train'].shape[1],
                           num_nodes=results[window][horizon]['X_train'].shape[1]).to(device)
 
-optimizer_final=torch.optim.Adam(final_model.parameters(), lr=best_params['learning_rate'])
+optimizer_final = torch.optim.Adam(final_model.parameters(), lr=best_params['learning_rate'])
 
-criterion_final = nn.MSELoss()  # Define criterion here
+criterion_final = nn.MSELoss()
 
 for epoch in tqdm(range(best_params['num_epochs']), desc="Final Training"):
      final_model.train()
      optimizer_final.zero_grad()
-     outputs=final_model(results[window][horizon]['X_train'])
-     loss=criterion_final(outputs ,results[window][horizon]['y_train'])
+     outputs = final_model(results[window][horizon]['X_train'])
+     loss = criterion_final(outputs, results[window][horizon]['y_train'])
      loss.backward()
      optimizer_final.step()
 
@@ -255,15 +306,15 @@ for epoch in tqdm(range(best_params['num_epochs']), desc="Final Training"):
 final_model.eval()
 
 with torch.no_grad():
-     test_outputs=final_model(results[window][horizon]['X_test'])
-     test_loss=criterion_final(test_outputs ,results[window][horizon]['y_test'])
+     test_outputs = final_model(results[window][horizon]['X_test'])
+     test_loss = criterion_final(test_outputs, results[window][horizon]['y_test'])
 
-     test_outputs_inverse=scaler.inverse_transform(test_outputs.cpu().numpy())
-     test_y_inverse=scaler.inverse_transform(results[window][horizon]['y_test'].cpu().numpy())
+     test_outputs_inverse = scaler.inverse_transform(test_outputs.cpu().numpy())
+     test_y_inverse = scaler.inverse_transform(results[window][horizon]['y_test'].cpu().numpy())
 
-     test_mae=mean_absolute_error(test_y_inverse,test_outputs_inverse)
-     test_rmse=np.sqrt(mean_squared_error(test_y_inverse,test_outputs_inverse))
-     test_mape=MAPE(test_y_inverse,test_outputs_inverse)
+     test_mae = mean_absolute_error(test_y_inverse, test_outputs_inverse)
+     test_rmse = np.sqrt(mean_squared_error(test_y_inverse, test_outputs_inverse))
+     test_mape = MAPE(test_y_inverse, test_outputs_inverse)
 
 print(f'Test Loss (MSE): {test_loss.item():.4f}')
 print(f'Test MAE: {test_mae:.4f}')
