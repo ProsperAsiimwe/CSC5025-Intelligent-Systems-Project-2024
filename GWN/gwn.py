@@ -210,19 +210,13 @@ class ContinualLearningModel:
         
 
 # Hyperparameter grid for tuning model parameters 
-# param_grid = {
-#     'hidden_size': [64, 128],
-#     'num_epochs': [100],
-#     'learning_rate': [0.001, 0.0005],
-#     'dropout_rate': [0.1, 0.2, 0.3]
-# }
-
 param_grid = {
-    'hidden_size': [128],
+    'hidden_size': [64, 128],
     'num_epochs': [100],
-    'learning_rate': [0.001],
-    'dropout_rate': [0.2]
+    'learning_rate': [0.001, 0.0005],
+    'dropout_rate': [0.1, 0.2, 0.3]
 }
+
 
 # Visualization function for performance metrics
 def plot_metrics(metrics_dict, metric_name, input_windows, prediction_horizons, save_dir='plots'):
