@@ -210,11 +210,18 @@ class ContinualLearningModel:
         
 
 # Hyperparameter grid for tuning model parameters 
+# param_grid = {
+#     'hidden_size': [64, 128],
+#     'num_epochs': [100],
+#     'learning_rate': [0.001, 0.0005],
+#     'dropout_rate': [0.1, 0.2, 0.3]
+# }
+
 param_grid = {
-    'hidden_size': [64, 128],
+    'hidden_size': [128],
     'num_epochs': [100],
-    'learning_rate': [0.001, 0.0005],
-    'dropout_rate': [0.1, 0.2, 0.3]
+    'learning_rate': [0.001],
+    'dropout_rate': [0.2]
 }
 
 # Visualization function for performance metrics
@@ -270,8 +277,9 @@ test_rmses = {window: {horizon: [] for horizon in prediction_horizons} for windo
 # Define the number of runs for stability analysis 
 num_runs = 3
 
-best_model = None
-best_overall_loss = float('inf')
+# Initialize a dictionary to store the best model for each window and horizon
+best_models = {window: {horizon: None for horizon in prediction_horizons} for window in input_windows}
+best_losses = {window: {horizon: float('inf') for horizon in prediction_horizons} for window in input_windows}
 
 # Perform grid search across different input windows and prediction horizons, has incorporated early stopping
 for window in input_windows:
@@ -283,22 +291,20 @@ for window in input_windows:
         best_loss = float('inf')
         best_params = {}
         
-        all_losses = []
-
         for params in ParameterGrid(param_grid):
             print(f"Testing parameters: {params}")
             run_losses = []
 
-            continual_model = ContinualLearningModel()
-            continual_model.initialize_model(input_size=results[window][horizon]['X_train'].shape[2],
-                                             hidden_size=params['hidden_size'],
-                                             output_size=results[window][horizon]['y_train'].shape[1],
-                                             num_nodes=results[window][horizon]['X_train'].shape[1],
-                                             learning_rate=params['learning_rate'],
-                                             dropout_rate=params['dropout_rate'])
-
             for run in range(num_runs):
                 start_time = time.time()
+
+                continual_model = ContinualLearningModel()
+                continual_model.initialize_model(input_size=results[window][horizon]['X_train'].shape[2],
+                                                 hidden_size=params['hidden_size'],
+                                                 output_size=results[window][horizon]['y_train'].shape[1],
+                                                 num_nodes=results[window][horizon]['X_train'].shape[1],
+                                                 learning_rate=params['learning_rate'],
+                                                 dropout_rate=params['dropout_rate'])
 
                 # Training loop with early stopping
                 for epoch in tqdm(range(params['num_epochs']), desc="Training Epochs"):
@@ -329,26 +335,20 @@ for window in input_windows:
 
                 run_losses.append(val_loss)
 
-            avg_loss = np.mean(run_losses) 
-            all_losses.append(avg_loss) 
+            avg_loss = np.mean(run_losses)
 
             if avg_loss < best_loss:
-                best_loss = avg_loss 
+                best_loss = avg_loss
                 best_params = params
-                
-                # Save the best model for this window and horizon
-                if avg_loss < best_overall_loss:
-                    best_overall_loss = avg_loss
-                    best_model = continual_model.model
-                    torch.save(best_model.state_dict(), f'best_model_w{window}_h{horizon}.pth')
+                best_models[window][horizon] = continual_model.model
+                best_losses[window][horizon] = best_loss
 
         print(f'Best parameters for window {window} and horizon {horizon}: {best_params} with average validation loss: {best_loss:.4f}')
         print('\n')
 
-# Ensure we have a best_model
-if best_model is None:
-    print("Warning: No best model was selected. Using the last trained model.")
-    best_model = continual_model.model
+        # Save the best model for this window and horizon
+        torch.save(best_models[window][horizon].state_dict(), f'best_model_w{window}_h{horizon}.pth')
+
 
 # Visualization: Plot metrics across runs
 plot_metrics(train_losses, 'Training Loss', input_windows, prediction_horizons)
@@ -363,21 +363,27 @@ plot_boxplots(test_maes, 'Test MAE', input_windows, prediction_horizons)
 plot_boxplots(test_rmses, 'Test RMSE', input_windows, prediction_horizons)
 
 # Final evaluation on the test set with the best overall model
-print(f"Final evaluation with the best overall model")
-best_model.eval()
+print("Final evaluation with the best models for each window and horizon")
 
-with torch.no_grad():
-    test_outputs = best_model(results[window][horizon]['X_test'])
-    test_loss = nn.MSELoss()(test_outputs, results[window][horizon]['y_test'])
+for window in input_windows:
+    for horizon in prediction_horizons:
+        print(f"\nEvaluating Window: {window}, Horizon: {horizon}")
+        
+        best_model = best_models[window][horizon]
+        best_model.eval()
 
-    test_outputs_inverse = scaler.inverse_transform(test_outputs.cpu().numpy())
-    test_y_inverse = scaler.inverse_transform(results[window][horizon]['y_test'].cpu().numpy())
+        with torch.no_grad():
+            test_outputs = best_model(results[window][horizon]['X_test'])
+            test_loss = nn.MSELoss()(test_outputs, results[window][horizon]['y_test'])
 
-    test_mae = mean_absolute_error(test_y_inverse, test_outputs_inverse)
-    test_rmse = np.sqrt(mean_squared_error(test_y_inverse, test_outputs_inverse))
-    test_mape = MAPE(test_y_inverse, test_outputs_inverse)
+            test_outputs_inverse = scaler.inverse_transform(test_outputs.cpu().numpy())
+            test_y_inverse = scaler.inverse_transform(results[window][horizon]['y_test'].cpu().numpy())
 
-print(f'Test Loss (MSE): {test_loss.item():.4f}')
-print(f'Test MAE: {test_mae:.4f}')
-print(f'Test RMSE: {test_rmse:.4f}')
-print(f'Test MAPE: {test_mape:.2f}%')
+            test_mae = mean_absolute_error(test_y_inverse, test_outputs_inverse)
+            test_rmse = np.sqrt(mean_squared_error(test_y_inverse, test_outputs_inverse))
+            test_mape = MAPE(test_y_inverse, test_outputs_inverse)
+
+        print(f'Test Loss (MSE): {test_loss.item():.4f}')
+        print(f'Test MAE: {test_mae:.4f}')
+        print(f'Test RMSE: {test_rmse:.4f}')
+        print(f'Test MAPE: {test_mape:.2f}%')
