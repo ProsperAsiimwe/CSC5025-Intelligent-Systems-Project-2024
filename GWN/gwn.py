@@ -346,8 +346,12 @@ for window in input_windows:
         print(f'Best parameters for window {window} and horizon {horizon}: {best_params} with average validation loss: {best_loss:.4f}')
         print('\n')
 
-        # Save the best model for this window and horizon
-        torch.save(best_models[window][horizon].state_dict(), f'best_model_w{window}_h{horizon}.pth')
+        # Create the 'best_models' directory if it doesn't exist
+        if not os.path.exists('best_models'):
+            os.makedirs('best_models')
+
+        #Save the best model for this window and horizon in the 'best_models' folder
+        torch.save(best_models[window][horizon].state_dict(), f'best_models/best_model_w{window}_h{horizon}.pth')
 
 
 # Visualization: Plot metrics across runs
