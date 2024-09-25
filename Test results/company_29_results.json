@@ -1,0 +1,272 @@
+[
+    {
+        "company": 29,
+        "horizon": 1,
+        "input_window": 30,
+        "run_time": 19.781746864318848,
+        "mae": 0.04772910475730896,
+        "mape": 89.26650285720825,
+        "rmse": 0.06546730548143387,
+        "optimal_hyperparameters": {
+            "kernel_size": 3,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 1
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 1,
+        "input_window": 60,
+        "run_time": 19.99317741394043,
+        "mae": 0.046667180955410004,
+        "mape": 87.21875548362732,
+        "rmse": 0.06396269798278809,
+        "optimal_hyperparameters": {
+            "kernel_size": 3,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 1
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 1,
+        "input_window": 120,
+        "run_time": 17.566267490386963,
+        "mae": 0.04768599942326546,
+        "mape": 97.84401655197144,
+        "rmse": 0.06471217423677444,
+        "optimal_hyperparameters": {
+            "kernel_size": 3,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 2
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 2,
+        "input_window": 30,
+        "run_time": 19.695993661880493,
+        "mae": 0.05822956562042236,
+        "mape": 101.08366012573242,
+        "rmse": 0.07897830009460449,
+        "optimal_hyperparameters": {
+            "kernel_size": 2,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 1
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 2,
+        "input_window": 60,
+        "run_time": 19.888033151626587,
+        "mae": 0.05589894950389862,
+        "mape": 95.00758051872253,
+        "rmse": 0.07586885988712311,
+        "optimal_hyperparameters": {
+            "kernel_size": 3,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 1
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 2,
+        "input_window": 120,
+        "run_time": 19.149943590164185,
+        "mae": 0.056497879326343536,
+        "mape": 115.59514999389648,
+        "rmse": 0.07648985832929611,
+        "optimal_hyperparameters": {
+            "kernel_size": 3,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 1
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 5,
+        "input_window": 30,
+        "run_time": 20.558430194854736,
+        "mae": 0.07544239610433578,
+        "mape": 145.55706977844238,
+        "rmse": 0.1011696457862854,
+        "optimal_hyperparameters": {
+            "kernel_size": 3,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 1
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 5,
+        "input_window": 60,
+        "run_time": 18.385850429534912,
+        "mae": 0.07511331140995026,
+        "mape": 155.3559422492981,
+        "rmse": 0.10113721340894699,
+        "optimal_hyperparameters": {
+            "kernel_size": 2,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 2
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 5,
+        "input_window": 120,
+        "run_time": 20.715997219085693,
+        "mae": 0.0736721009016037,
+        "mape": 136.91327571868896,
+        "rmse": 0.09925100207328796,
+        "optimal_hyperparameters": {
+            "kernel_size": 2,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 1
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 10,
+        "input_window": 30,
+        "run_time": 19.135298013687134,
+        "mae": 0.09523637592792511,
+        "mape": 164.2040729522705,
+        "rmse": 0.1270173043012619,
+        "optimal_hyperparameters": {
+            "kernel_size": 2,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 2
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 10,
+        "input_window": 60,
+        "run_time": 19.17611336708069,
+        "mae": 0.09773560613393784,
+        "mape": 166.180419921875,
+        "rmse": 0.13010722398757935,
+        "optimal_hyperparameters": {
+            "kernel_size": 2,
+            "num_channels": [
+                1,
+                16,
+                32
+            ],
+            "dilation": 2
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 10,
+        "input_window": 120,
+        "run_time": 18.80538821220398,
+        "mae": 0.09235436469316483,
+        "mape": 151.50567293167114,
+        "rmse": 0.12305456399917603,
+        "optimal_hyperparameters": {
+            "kernel_size": 3,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 2
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 30,
+        "input_window": 30,
+        "run_time": 19.56737470626831,
+        "mae": 0.14178135991096497,
+        "mape": 310.6361150741577,
+        "rmse": 0.18651901185512543,
+        "optimal_hyperparameters": {
+            "kernel_size": 2,
+            "num_channels": [
+                1,
+                16,
+                32
+            ],
+            "dilation": 1
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 30,
+        "input_window": 60,
+        "run_time": 19.599736213684082,
+        "mae": 0.13820500671863556,
+        "mape": 300.01220703125,
+        "rmse": 0.1825745403766632,
+        "optimal_hyperparameters": {
+            "kernel_size": 2,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 1
+        }
+    },
+    {
+        "company": 29,
+        "horizon": 30,
+        "input_window": 120,
+        "run_time": 20.58971881866455,
+        "mae": 0.13647907972335815,
+        "mape": 281.8981409072876,
+        "rmse": 0.1807546764612198,
+        "optimal_hyperparameters": {
+            "kernel_size": 2,
+            "num_channels": [
+                1,
+                32,
+                64
+            ],
+            "dilation": 1
+        }
+    }
+]
